@@ -103,7 +103,7 @@ void writePPM(const char *filename, PPMImage *img)
     fprintf(fp, "%d %d\n",img->x,img->y);
 
     // rgb component depth
-    fprintf(fp, "%d\n",RGB_COMPONENT_COLOR);
+    fprintf(fp, "%d\n", ENT_COLOR);
 
     // pixel data
     fwrite(img->data, 3 * img->x, img->y, fp);
