@@ -112,7 +112,7 @@ void writePPM(const char *filename, PPMImage *img)
 
 
 
-
+/* met les pixels en effet négatif*/
 
 void changeColorPPM(PPMImage *img){
     int i;
