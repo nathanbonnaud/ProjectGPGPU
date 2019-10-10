@@ -4,7 +4,7 @@
 
 
 #define CREATOR "PARALLELISME2OPENMP"
-int divisionFactor= 21;
+int divisionFactor= 1;
 
 
 PPMImage *readPPM(const char *filename)
@@ -129,29 +129,50 @@ void changeColorPPM(PPMImage *img){
 
 
 void filterSofter(PPMImage *img, PPMImage *destination){
-        int filter[25] = { 0, 0, 0, 0, 0,
-                             0, 1, 3, 1, 0,
-                             0, 3, 5, 3, 0,
-                             0, 1, 3, 1, 0,
-                             0, 0, 0, 0, 0};
+        int filter[25] = { 1,   2,   0,   -2,   -1,
+                           4 ,  8,   0 ,  -8 ,  -4,
+                           6  , 12 , 0 ,  -12  , -6 ,
+                           4,   8,   0 ,  -8,    -4,
+                           1,   2,   0,   -2,   -1 };
        int gridCounter;
        int finalRed =0;
        int finalGreen  =0;
        int  finalBlue =0;
+       int tmpx;
+       int tmpy;
        for(int y=0; y<=img->y; y++){ // for each pixel in the image
         for(int x=0; x<=img->x; x++){ 
              gridCounter=0;// reset some values 
             finalRed = 0;
             finalGreen = 0;
             finalBlue =0;
+            tmpx =0;
+            tmpy =0;
             for(int y2=-2; y2<=2; y2++){ // and for each pixel around our
                 for(int x2=-2; x2<=2; x2++) {  //  "hot pixel"...{ 
                     // Add to our running total 
-                    finalRed += img->data[(x+x2) + (y+y2)*img->x].red * filter[gridCounter];  // Go to the next value on the filter grid 
-                    finalGreen +=  img->data[(x+x2) + (y+y2)*img->x].green * filter[gridCounter]; 
-                    finalBlue +=  img->data[(x+x2) + (y+y2)*img->x].blue * filter[gridCounter]; 
-                    gridCounter++;
-                }
+                      tmpx=x2;
+                       tmpy=y2;
+                    if( x+x2 > (img->x)-2){
+                        tmpx = -x2;
+                    }else if( x+x2 < 0 ){
+                        tmpx = -x2;
+                    }
+
+                    if (y+y2 > (img->y)-2){
+                        tmpy = -y2;                    
+                    }else if (y+y2 < 0) {
+                       tmpy=-y2;
+                    }
+                        
+                
+                    finalRed += img->data[(x+tmpx) + (y+tmpy)*img->x].red * filter[gridCounter];  // Go to the next value on the filter grid 
+                    finalGreen +=  img->data[(x+tmpx) + (y+tmpy)*img->x].green * filter[gridCounter]; 
+                    finalBlue +=  img->data[(x+tmpx) + (y+tmpy)*img->x].blue * filter[gridCounter]; 
+               
+     gridCounter++;
+                }}
+                
                 // and put it back into the right range
 
                 finalRed  /= divisionFactor;
@@ -162,8 +183,10 @@ void filterSofter(PPMImage *img, PPMImage *destination){
                 destination->data[x+y*img->x].blue = finalBlue;
             }
         }
-    }
+    
 }
+
+
 
 
 int main(){
