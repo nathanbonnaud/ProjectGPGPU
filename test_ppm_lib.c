@@ -127,32 +127,55 @@ void changeColorPPM(PPMImage *img){
     }
 }
 
-
+void filterGris(PPMImage *img){
+    for (int x =0; x< img->x;x++){
+        for(int y =0; y< img->y; y++){
+            if ( (img->data[ (x) + (y)*img->x].red + img->data[(x) + (y)*img->x].green + img->data[(x) + (y)*img->x].blue)/3 < 128){
+                img->data[ (x) + (y)*img->x].red =0;
+                img->data[ (x) + (y)*img->x].green =0;
+                img->data[ (x) + (y)*img->x].blue =0;
+            }else{
+                img->data[ (x) + (y)*img->x].red =255;
+                img->data[ (x) + (y)*img->x].green =255;
+                img->data[ (x) + (y)*img->x].blue =255;
+            } 
+         }    
+    }
+}
 void filterSofter(PPMImage *img, PPMImage *destination){
+        filterGris(img);
+        /* Matrice d'application du filtre */
         int filter[25] = { 1,   2,   0,   -2,   -1,
                            4 ,  8,   0 ,  -8 ,  -4,
                            6  , 12 , 0 ,  -12  , -6 ,
                            4,   8,   0 ,  -8,    -4,
                            1,   2,   0,   -2,   -1 };
+        
+        /* finalRed, finalGreen et finalBlue servent à stocker les valeurs à affecter dans l'image "destination"*/
        int gridCounter;
        int finalRed =0;
        int finalGreen  =0;
        int  finalBlue =0;
+       
+        /* tmpx et tmpy sont utilisé pour calculer les bordures sans changer les tours de boucle*/
        int tmpx;
        int tmpy;
+
        for(int y=0; y<=img->y; y++){ // for each pixel in the image
         for(int x=0; x<=img->x; x++){ 
-             gridCounter=0;// reset some values 
+            gridCounter=0;// reset some values 
             finalRed = 0;
             finalGreen = 0;
             finalBlue =0;
             tmpx =0;
             tmpy =0;
             for(int y2=-2; y2<=2; y2++){ // and for each pixel around our
-                for(int x2=-2; x2<=2; x2++) {  //  "hot pixel"...{ 
+                for(int x2=-2; x2<=2; x2++) { 
                     // Add to our running total 
                       tmpx=x2;
-                       tmpy=y2;
+                      tmpy=y2;
+
+                    // Ces deux conditions servent à appliquer un effet miroir pour les problèmes de bords //
                     if( x+x2 > (img->x)-2){
                         tmpx = -x2;
                     }else if( x+x2 < 0 ){
@@ -166,18 +189,17 @@ void filterSofter(PPMImage *img, PPMImage *destination){
                     }
                         
                 
-                    finalRed += img->data[(x+tmpx) + (y+tmpy)*img->x].red * filter[gridCounter];  // Go to the next value on the filter grid 
+                    finalRed += img->data[(x+tmpx) + (y+tmpy)*img->x].red * filter[gridCounter];  
                     finalGreen +=  img->data[(x+tmpx) + (y+tmpy)*img->x].green * filter[gridCounter]; 
                     finalBlue +=  img->data[(x+tmpx) + (y+tmpy)*img->x].blue * filter[gridCounter]; 
-               
-     gridCounter++;
+                    gridCounter++;
                 }}
                 
-                // and put it back into the right range
-
                 finalRed  /= divisionFactor;
                 finalGreen  /= divisionFactor;
                 finalBlue  /= divisionFactor;
+                
+                // Pour finir on reaffecte les valeurs modifier dans la copie de notre image //
                 destination->data[x+y*img->x].red = finalRed;
                 destination->data[x+y*img->x].green = finalGreen;
                 destination->data[x+y*img->x].blue = finalBlue;
@@ -193,8 +215,11 @@ int main(){
     PPMImage *image, *image1;
     image = readPPM("imageProject.ppm");
     image1 = readPPM("imageProject.ppm");
-    filterSofter(image,image1);
     
-    //changeColorPPM(image);
+    /* application de filtre version cpu*/
+    filterSofter(image,image1);
+
+
+
     writePPM("imageProjectResult.ppm",image1);
 }
