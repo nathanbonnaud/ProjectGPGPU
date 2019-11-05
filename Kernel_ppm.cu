@@ -3,6 +3,7 @@
 #include "ppm_lib.h"
 
 #define divisionFactor 9
+#define N 500*1000
 static void HandleError( cudaError_t err, const char *file, int line ) {
 if (err != cudaSuccess) {
 printf( "%s in %s at line %d\n", cudaGetErrorString( err ), file, line );
@@ -104,56 +105,53 @@ void writePPM(const char *filename, PPMImage *img)
 
 
 
+// GPU version 1//
+// un bloc par pixel et un bloc par ligne on incrémente//  
+__global__ void filterSofter(PPMPixel *img,int *filter ,PPMPixel *destination){
+     
+         
+         int  finalRed =0;
+         int  finalGreen  =0;
+         int  finalBlue =0;
+         int indFiltre = 0;
+         
+         int tidX =threadIdx.x+ blockIdx.x*blockDim.x;
+         int l=tidX/500;          
+         int c=tidX%500;
+         int ll;
+         int cc;
 
-__global__ void filterSofter(PPMPixel *img,int* filter ,PPMPixel *destination){
-        /*
-       int gridCounter;
-       int finalRed =0;
-       int finalGreen  =0;
-       int  finalBlue =0;
-       int tmpx;
-       int tmpy;
-       for(int y=0; y<=img->y; y++){ // for each pixel in the image
-        for(int x=0; x<=img->x; x++){ 
-             gridCounter=0;
-            finalRed = 0;
-            finalGreen = 0;
-            finalBlue =0;
-            tmpx =0;
-            tmpy =0;
-            for(int y2=-2; y2<=2; y2++){ 
-                for(int x2=-2; x2<=2; x2++) {  
-                      tmpx=x2;
-                       tmpy=y2;
-                    if( x+x2 > (img->x)-2){
-                        tmpx = -x2;
-                    }else if( x+x2 < 0 ){
-                        tmpx = -x2;
-                    }
+        for(int i=-2;i<=2;i++){
+            for(int j=-2;j<=2;j++){
+            ll=l+i;
+            cc=c+j;
 
-                    if (y+y2 > (img->y)-2){
-                        tmpy = -y2;                    
-                    }else if (y+y2 < 0) {
-                       tmpy=-y2;
-                    }
-                        
-                    finalRed += img-[(x+tmpx) + (y+tmpy)*img->x].red * filter[gridCounter];  
-                    finalGreen +=  img-[(x+tmpx) + (y+tmpy)*img->x].green * filter[gridCounter]; 
-                    finalBlue +=  img-[(x+tmpx) + (y+tmpy)*img->x].blue * filter[gridCounter]; 
-                    gridCounter++;
-                }}
-                
-
-                destination[x+y*img->x].red = finalRed / divisionFactor;
-                destination-[x+y*img->x].green = finalGreen / divisionFactor;
-               destination[x+y*img->x].blue = finalBlue / divisionFactor;
+            if(ll<0 ){
+                ll=-ll;
+            }else if(ll>1000){
+              ll=l-i;
             }
-        }*/
+            if(cc<0 ){
+                cc=-cc;
+            } else if (cc>500){
+              cc=c-j;
+            }
 
-        return;
+            finalRed += img[(ll)*500+(cc)].red * filter[indFiltre];  
+            finalGreen +=  img[(ll)*500+(cc)].green * filter[indFiltre]; 
+            finalBlue +=  img[(ll)*500+(cc)].blue * filter[indFiltre]; 
+            indFiltre++;
+        
+            }
+        }
+        
+        
+         destination[tidX].red =  finalRed / divisionFactor;
+         destination[tidX].green = finalGreen / divisionFactor;
+         destination[tidX].blue =  finalBlue / divisionFactor;
+        
     
 }
-
 
 
 
@@ -164,15 +162,17 @@ int main(){
     imageCopy = readPPM("imageProject.ppm");
     
 
-int filter[25] = { 0,  0,   0,   0,   0,
-                   0 ,  0 ,  0 ,  0 ,  0 ,
-                   1 ,  2 ,  3 ,  2 ,  1 ,
-                   0  , 0 ,  0 ,  0 ,  0,
-                   0 ,  0 ,  0 ,  0 ,  0 };
+int filter[25] = { 1,   2,   0,   -2,   -1,
+                           4 ,  8,   0 ,  -8 ,  -4,
+                           6  , 12 , 0 ,  -12  , -6 ,
+                           4,   8,   0 ,  -8,    -4,
+                           1,   2,   0,   -2,   -1 };
+
 
 PPMPixel *dev_image;
 PPMPixel*dev_imageCopy;
 int *dev_filter;
+
 //double time;
 //cudaEvent_t start,stop;
 
@@ -181,18 +181,20 @@ HANDLE_ERROR( cudaMalloc( (void**)&dev_image, image->x*image->y *3* sizeof(char)
 HANDLE_ERROR( cudaMalloc( (void**)&dev_imageCopy, imageCopy->x*imageCopy->y*3 * sizeof(char) ) );
 HANDLE_ERROR( cudaMalloc( (void**)&dev_filter, 25 * sizeof(int) ));
 
+
 /* copier 'a' et 'b' sur le GPU */
 
 HANDLE_ERROR( cudaMemcpy( dev_image, image->data,image->x*image->y *3* sizeof(char),cudaMemcpyHostToDevice));
 HANDLE_ERROR( cudaMemcpy( dev_imageCopy, imageCopy->data, imageCopy->x*imageCopy->y *3* sizeof(char),cudaMemcpyHostToDevice));
 HANDLE_ERROR( cudaMemcpy( dev_filter, filter, 25 * sizeof(int),cudaMemcpyHostToDevice));
 
+
 /*cudaEventCreate(&start);
 cudaEventCreate(&stop);
 cudaEventRecord(start, 0);
 */
-filterSofter<<<10,25>>>(dev_image,dev_filter,dev_imageCopy);
-cudaThreadSynchronize();
+filterSofter<<<500,1000>>>(dev_image,dev_filter,dev_imageCopy);
+
 
 printf(">%s\n",cudaGetErrorString (cudaGetLastError ()));
 /*
@@ -202,7 +204,7 @@ cudaEventElapsedTime(&time, start, stop);
 */
 
 /* copier le tableau 'c' depuis le GPU vers le CPU */
-HANDLE_ERROR( cudaMemcpy( imageCopy->data, dev_image, imageCopy->x*imageCopy->y * 3*sizeof(char), cudaMemcpyDeviceToHost));
+cudaMemcpy( imageCopy->data, dev_imageCopy, imageCopy->x*imageCopy->y * 3*sizeof(char), cudaMemcpyDeviceToHost);
 
 
 //printf("Temps nécessaire :  %3.1f ms\n", time);
