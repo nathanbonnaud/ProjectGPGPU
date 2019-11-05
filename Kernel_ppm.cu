@@ -14,7 +14,9 @@ exit( EXIT_FAILURE ); }
 
 #define CREATOR "PARALLELISME2OPENMP"
 
-
+struct filterCoeff{
+ int l,c;
+};
 
 PPMImage *readPPM(const char *filename)
 {
@@ -105,6 +107,7 @@ void writePPM(const char *filename, PPMImage *img)
 
 
 
+
 // GPU version 1//
 // un bloc par pixel et un bloc par ligne on incrémente//  
 __global__ void filterSofter(PPMPixel *img,int *filter ,PPMPixel *destination){
@@ -150,7 +153,6 @@ __global__ void filterSofter(PPMPixel *img,int *filter ,PPMPixel *destination){
          destination[tidX].green = finalGreen / divisionFactor;
          destination[tidX].blue =  finalBlue / divisionFactor;
         
-    
 }
 
 
@@ -169,9 +171,21 @@ int filter[25] = { 1,   2,   0,   -2,   -1,
                            1,   2,   0,   -2,   -1 };
 
 
+
+
+ filterCoeff coeff[25] = {};
+
+int k=0;
+for(int i=-2;i<=2;i++)
+    for(int j=-2;j<=2;j++)
+            coeff[k++]={i,j};
+ 
+
 PPMPixel *dev_image;
-PPMPixel*dev_imageCopy;
+PPMPixel *dev_imageCopy;
 int *dev_filter;
+
+filterCoeff *dev_coeff;
 
 //double time;
 //cudaEvent_t start,stop;
@@ -180,6 +194,7 @@ int *dev_filter;
 HANDLE_ERROR( cudaMalloc( (void**)&dev_image, image->x*image->y *3* sizeof(char) ) );
 HANDLE_ERROR( cudaMalloc( (void**)&dev_imageCopy, imageCopy->x*imageCopy->y*3 * sizeof(char) ) );
 HANDLE_ERROR( cudaMalloc( (void**)&dev_filter, 25 * sizeof(int) ));
+HANDLE_ERROR( cudaMalloc( (void**)&dev_coeff, 25* sizeof( filterCoeff) ));
 
 
 /* copier 'a' et 'b' sur le GPU */
@@ -187,14 +202,15 @@ HANDLE_ERROR( cudaMalloc( (void**)&dev_filter, 25 * sizeof(int) ));
 HANDLE_ERROR( cudaMemcpy( dev_image, image->data,image->x*image->y *3* sizeof(char),cudaMemcpyHostToDevice));
 HANDLE_ERROR( cudaMemcpy( dev_imageCopy, imageCopy->data, imageCopy->x*imageCopy->y *3* sizeof(char),cudaMemcpyHostToDevice));
 HANDLE_ERROR( cudaMemcpy( dev_filter, filter, 25 * sizeof(int),cudaMemcpyHostToDevice));
+HANDLE_ERROR( cudaMemcpy( dev_coeff, coeff, 25 * sizeof( filterCoeff),cudaMemcpyHostToDevice));
 
 
 /*cudaEventCreate(&start);
 cudaEventCreate(&stop);
 cudaEventRecord(start, 0);
 */
-filterSofter<<<500,1000>>>(dev_image,dev_filter,dev_imageCopy);
 
+filterSofter<<<500,1000>>>(dev_image,dev_filter,dev_imageCopy);
 
 printf(">%s\n",cudaGetErrorString (cudaGetLastError ()));
 /*
@@ -204,7 +220,8 @@ cudaEventElapsedTime(&time, start, stop);
 */
 
 /* copier le tableau 'c' depuis le GPU vers le CPU */
-cudaMemcpy( imageCopy->data, dev_imageCopy, imageCopy->x*imageCopy->y * 3*sizeof(char), cudaMemcpyDeviceToHost);
+
+HANDLE_ERROR( cudaMemcpy( imageCopy->data, dev_imageCopy, imageCopy->x*imageCopy->y * 3*sizeof(char), cudaMemcpyDeviceToHost));
 
 
 //printf("Temps nécessaire :  %3.1f ms\n", time);
