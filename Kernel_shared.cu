@@ -105,22 +105,30 @@ void writePPM(const char *filename, PPMImage *img)
 }
 
 
+
+
 // GPU version 1//
 // un thread par pixel et un bloc par ligne on incrémente//  
 __global__ void filterSofter(PPMPixel *img,int *filter ,PPMPixel *destination){
      
+             
+        // __shared__ int tmpRed[12501];
+         __shared__ int tmpBlue[12501];
+      //   __shared__ int tmpGreen[12501];
+
          
-         int  finalRed =0;
-         int  finalGreen  =0;
+       // int  finalRed =0;
+        // int  finalGreen  =0;
          int  finalBlue =0;
-         int indFiltre = 0;
+                
+         
          
          int tidX =threadIdx.x+ blockIdx.x*blockDim.x;
          int l=tidX/500;          
          int c=tidX%500;
          int ll;
          int cc;
-
+         int count=0  ; 
         for(int i=-2;i<=2;i++){
             for(int j=-2;j<=2;j++){
             ll=l+i;
@@ -137,17 +145,23 @@ __global__ void filterSofter(PPMPixel *img,int *filter ,PPMPixel *destination){
               cc=c-j;
             }
 
-            finalRed += img[(ll)*500+(cc)].red * filter[indFiltre];  
-            finalGreen +=  img[(ll)*500+(cc)].green * filter[indFiltre]; 
-            finalBlue +=  img[(ll)*500+(cc)].blue * filter[indFiltre]; 
-            indFiltre++;
-        
+          //  tmpRed[25*tidX+count] = img[(ll)*500+(cc)].red;  
+          //  tmpGreen[25*tidX+count]= img[(ll)*500+(cc)].green;
+            tmpBlue[25*tidX+count]= img[(ll)*500+(cc)].blue;
+            count++;
             }
         }
         
+        __syncthreads();
         
-         destination[tidX].red =  finalRed / divisionFactor;
-         destination[tidX].green = finalGreen / divisionFactor;
+        for(int i=0;i<25;i++){
+          //  finalRed += tmpRed[i+25*threadIdx.x] * filter[i];
+           // finalGreen += tmpGreen[i+25*threadIdx.x] * filter[i];
+            finalBlue += tmpBlue[i+25*threadIdx.x] * filter[i];
+         } 
+        
+        // destination[tidX].red =  finalRed / divisionFactor;
+        // destination[tidX].green = finalGreen / divisionFactor;
          destination[tidX].blue =  finalBlue / divisionFactor;
         
 }
@@ -179,9 +193,9 @@ for(int i=-2;i<=2;i++)
  
 
 
-PPMPixel *tempo;
+
 PPMPixel *dev_image;
-PPMPixel *dev_tempo;
+
 PPMPixel *dev_imageCopy;
 int *dev_filter;
 
@@ -193,7 +207,6 @@ filterCoeff *dev_coeff;
 
 HANDLE_ERROR( cudaMalloc( (void**)&dev_image, image->x*image->y *3* sizeof(char) ) );
 HANDLE_ERROR( cudaMalloc( (void**)&dev_imageCopy, imageCopy->x*imageCopy->y*3 * sizeof(char) ) );
-HANDLE_ERROR( cudaMalloc( (void**)&dev_tempo, image->x*imageCopy->y*3 *25* sizeof(char) ) );
 HANDLE_ERROR( cudaMalloc( (void**)&dev_filter, 25 * sizeof(int) ));
 HANDLE_ERROR( cudaMalloc( (void**)&dev_coeff, 25* sizeof( filterCoeff) ));
 
@@ -212,10 +225,10 @@ cudaEventCreate(&stop);
 cudaEventRecord(start, 0);
 */
 
-tempo<<<500,1000>>>(dev_image,dev_tempo);
 
-HANDLE_ERROR( cudaMemcpy( tempo, dev_tempo, imageCopy->x*imageCopy->y * 3*25*sizeof(char), cudaMemcpyDeviceToHost));
-printf(">%s\n",cudaGetErrorString (cudaGetLastError ()));
+
+
+
 /*
 cudaEventRecord(stop, 0);
 cudaEventSynchronize(stop);
@@ -223,7 +236,7 @@ cudaEventElapsedTime(&time, start, stop);
 */
 filterSofter<<<500,1000>>>(dev_image,dev_filter,dev_imageCopy);
 /* copier le tableau 'c' depuis le GPU vers le CPU */
-
+printf(">%s\n",cudaGetErrorString (cudaGetLastError ()));
 HANDLE_ERROR( cudaMemcpy( imageCopy->data, dev_imageCopy, imageCopy->x*imageCopy->y * 3*sizeof(char), cudaMemcpyDeviceToHost));
 
 
